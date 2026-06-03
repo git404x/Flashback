@@ -28,46 +28,24 @@ public class AsyncFileDialogs {
         currentSaveOrOpenFileDialog = new CompletableFuture<>();
         CompletableFuture<String> future = currentSaveOrOpenFileDialog;
 
-        boolean initializedNfd = AsyncFileDialogs.initializedNfd;
-        AsyncFileDialogs.initializedNfd = true;
-
         Runnable runnable = () -> {
-            if (!initializedNfd) {
-                NativeFileDialog.NFD_Init();
-            }
+            try {
+                // current minecraft folder
+                java.nio.file.Path runDir = net.minecraft.client.Minecraft.getInstance().gameDirectory.toPath();
+                java.nio.file.Path renderDir = runDir.resolve("flashback").resolve("renders");
 
-            try (MemoryStack stack = MemoryStack.stackPush()) {
-                PointerBuffer out = stack.callocPointer(1);
+                java.nio.file.Files.createDirectories(renderDir);
 
-                StringBuilder filterBuilder = new StringBuilder();
+                String safeName = defaultName != null ? defaultName.replaceAll("[^a-zA-Z0-9.-]", "_") : "cinematic";
+                String fileName = safeName + "_" + System.currentTimeMillis() + ".mp4";
+                String finalPath = renderDir.resolve(fileName).toAbsolutePath().toString();
 
-                for (String filter : filters) {
-                    if (!filterBuilder.isEmpty()) filterBuilder.append(",");
-                    filterBuilder.append(filter(filter));
-                }
-
-                NFDFilterItem.Buffer filtersBuffer = NFDFilterItem.malloc(1);
-                filtersBuffer.get(0)
-                        .name(stack.UTF8(filter(filterDescription)))
-                        .spec(stack.UTF8(filterBuilder.toString()));
-
-                int result = NativeFileDialog.NFD_SaveDialog(out, filtersBuffer, filter(defaultPath), filter(defaultName));
-
-                if (result != NativeFileDialog.NFD_OKAY) {
-                    currentSaveOrOpenFileDialog.complete(null);
-                    currentSaveOrOpenFileDialog = null;
-                } else {
-                    currentSaveOrOpenFileDialog.complete(out.getStringUTF8(0));
-                    currentSaveOrOpenFileDialog = null;
-                    NativeFileDialog.NFD_FreePath(out.get(0));
-                }
-            } catch (Throwable t) {
-                t.printStackTrace();
+                currentSaveOrOpenFileDialog.complete(finalPath);
+            } catch (Exception e) {
+                e.printStackTrace();
+                currentSaveOrOpenFileDialog.complete(null);
             } finally {
-                if (currentSaveOrOpenFileDialog != null) {
-                    currentSaveOrOpenFileDialog.complete(null);
-                    currentSaveOrOpenFileDialog = null;
-                }
+                currentSaveOrOpenFileDialog = null;
             }
         };
 
